@@ -9,10 +9,11 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { Input } from "../components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
 import { Label } from "../components/ui/label";
-import { Plus, Trash, Play, Pencil, X } from "lucide-react";
+import { ListTree, Loader2, Plus, Trash, Play, Pencil, X } from "lucide-react";
 import { toast } from "sonner";
 import { useForm, useFieldArray, useWatch } from "react-hook-form";
 import { useI18n } from "../components/LocaleProvider";
+import { EmptyState, Page, TableSkeletonRows } from "../components/Page";
 
 type ProviderField = {
   name: string;
@@ -53,7 +54,7 @@ export function DnsChannels() {
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
-  const { data: channels = [], isLoading } = useQuery<DnsChannel[]>({
+  const { data: channels = [], isLoading, isError, refetch } = useQuery<DnsChannel[]>({
     queryKey: ['dns-channels'],
     queryFn: () => api.get<DnsChannel[]>('/admin/dns-channels'),
   });
@@ -174,71 +175,100 @@ export function DnsChannels() {
     setIsAddOpen(true);
   };
 
+  const openAdd = () => {
+    form.reset({ id: undefined, name: "", provider: "dns_cf", credentials: {}, customFields: [] });
+    setIsAddOpen(true);
+  };
+
   const selectedProviderInfo = PROVIDERS.find(p => p.id === provider) || PROVIDERS[0];
   const providerLabel = selectedProviderInfo.name;
 
   return (
-    <div className="p-4 sm:p-6 w-full max-w-full overflow-x-hidden space-y-4 sm:space-y-6">
-      <div className="flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between">
-        <h1 className="text-2xl font-bold tracking-tight">{t("dns.title")}</h1>
-        <Button className="w-full sm:w-auto" onClick={() => { form.reset({ id: undefined, name: "", provider: "dns_cf", credentials: {}, customFields: [] }); setIsAddOpen(true); }}>
-          <Plus className="mr-2 h-4 w-4" /> {t("dns.add")}
+    <Page
+      title={t("dns.title")}
+      description={t("dns.pageDescription")}
+      actions={
+        <Button onClick={openAdd}>
+          <Plus /> {t("dns.add")}
         </Button>
-      </div>
-
-      <Card>
+      }
+    >
+      <Card className="gap-0 py-0">
         <CardContent className="p-0">
-          <div className="w-full overflow-x-auto">
-            <Table className="min-w-[720px]">
+          <Table className="min-w-[640px]">
             <TableHeader>
               <TableRow>
                 <TableHead>{t("table.name")}</TableHead>
                 <TableHead>{t("table.provider")}</TableHead>
                 <TableHead>{t("table.configuration")}</TableHead>
-                <TableHead className="text-right">{t("table.actions")}</TableHead>
+                <TableHead className="w-[168px]"></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {isLoading ? (
-                <TableRow><TableCell colSpan={4} className="text-center py-8">{t("common.loading")}</TableCell></TableRow>
+                <TableSkeletonRows columns={4} rows={3} />
+              ) : isError ? (
+                <TableRow className="hover:bg-transparent">
+                  <TableCell colSpan={4}>
+                    <EmptyState
+                      title={t("common.loadFailed")}
+                      action={<Button variant="outline" onClick={() => void refetch()}>{t("common.retry")}</Button>}
+                    />
+                  </TableCell>
+                </TableRow>
               ) : channels.length === 0 ? (
-                <TableRow><TableCell colSpan={4} className="text-center py-8 text-muted-foreground">{t("dns.empty")}</TableCell></TableRow>
+                <TableRow className="hover:bg-transparent">
+                  <TableCell colSpan={4}>
+                    <EmptyState
+                      icon={ListTree}
+                      title={t("dns.empty")}
+                      action={<Button onClick={openAdd}><Plus /> {t("dns.add")}</Button>}
+                    />
+                  </TableCell>
+                </TableRow>
               ) : (
-                channels.map((c) => (
+                channels.map((c) => {
+                  const testing = testMutation.isPending && testMutation.variables === c.id;
+                  return (
                   <TableRow key={c.id}>
                     <TableCell className="font-medium">{c.name}</TableCell>
                     <TableCell>{PROVIDERS.find(p => p.id === c.provider)?.name || c.provider}</TableCell>
-                    <TableCell className="text-muted-foreground text-sm">
+                    <TableCell className="text-muted-foreground">
                       {t("dns.configured", { count: Object.keys(c.credentials || {}).length })}
                     </TableCell>
-                    <TableCell className="text-right">
-                      <Button variant="ghost" size="sm" onClick={() => testMutation.mutate(c.id)}>
-                        <Play className="mr-2 h-4 w-4" /> {t("dns.test")}
-                      </Button>
-                      <Button variant="ghost" size="icon" onClick={() => openEdit(c)}>
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                      <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => setDeleteId(c.id)}>
-                        <Trash className="h-4 w-4" />
-                      </Button>
+                    <TableCell>
+                      <div className="flex items-center justify-end gap-0.5">
+                        <Button variant="ghost" size="sm" disabled={testing} onClick={() => testMutation.mutate(c.id)}>
+                          {testing ? <Loader2 className="animate-spin" /> : <Play />}
+                          {testing ? t("common.testing") : t("dns.test")}
+                        </Button>
+                        <Button variant="ghost" size="icon-sm" title={t("common.edit")} onClick={() => openEdit(c)}>
+                          <Pencil />
+                          <span className="sr-only">{t("common.edit")}</span>
+                        </Button>
+                        <Button variant="ghost" size="icon-sm" title={t("common.delete")} className="text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={() => setDeleteId(c.id)}>
+                          <Trash />
+                          <span className="sr-only">{t("common.delete")}</span>
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
-                ))
+                  );
+                })
               )}
             </TableBody>
-            </Table>
-          </div>
+          </Table>
         </CardContent>
       </Card>
 
       <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
-        <DialogContent className="w-[calc(100vw-2rem)] sm:max-w-md max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-h-[90vh] overflow-y-auto">
           <form onSubmit={form.handleSubmit(onSubmit)}>
             <DialogHeader>
               <DialogTitle>{form.getValues('id') ? t("dns.editTitle") : t("dns.addTitle")}</DialogTitle>
               <DialogDescription>{t("dns.description")}</DialogDescription>
             </DialogHeader>
-            <div className="grid gap-4 py-4 max-h-[60vh] overflow-y-auto px-1">
+            <div className="grid gap-4 py-4">
               <div className="grid gap-2">
                 <Label htmlFor="name">{t("dns.channelName")}</Label>
                 <Input id="name" placeholder={t("dns.channelPlaceholder")} required {...form.register('name')} />
@@ -246,7 +276,7 @@ export function DnsChannels() {
               <div className="grid gap-2">
                 <Label htmlFor="provider">{t("table.provider")}</Label>
                 <Select value={provider} onValueChange={(val) => val && form.setValue('provider', val)}>
-                  <SelectTrigger>
+                  <SelectTrigger id="provider" className="w-full">
                     <SelectValue>{providerLabel}</SelectValue>
                   </SelectTrigger>
                   <SelectContent>
@@ -257,7 +287,7 @@ export function DnsChannels() {
                 </Select>
               </div>
 
-              <div className="p-4 bg-muted/50 rounded-md space-y-4 mt-2 border">
+              <div className="space-y-4 rounded-lg border bg-muted/40 p-4">
                 <p className="text-sm font-medium">{t("dns.credentialsFor", { provider: selectedProviderInfo.name })}</p>
                 {form.getValues('id') && <p className="text-xs text-muted-foreground">{t("dns.keepExisting")}</p>}
 
@@ -290,13 +320,14 @@ export function DnsChannels() {
                       </div>
                     ))}
                     <Button type="button" variant="outline" size="sm" onClick={() => append({ key: '', value: '' })}>
-                      <Plus className="mr-2 h-4 w-4" /> {t("dns.addField")}
+                      <Plus className="size-4" /> {t("dns.addField")}
                     </Button>
                   </div>
                 )}
               </div>
             </div>
             <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setIsAddOpen(false)}>{t("common.cancel")}</Button>
               <Button type="submit" disabled={saveMutation.isPending}>
                 {saveMutation.isPending ? t("common.saving") : t("dns.saveChannel")}
               </Button>
@@ -306,7 +337,7 @@ export function DnsChannels() {
       </Dialog>
 
       <Dialog open={!!deleteId} onOpenChange={(open) => !open && setDeleteId(null)}>
-        <DialogContent className="w-[calc(100vw-2rem)] sm:max-w-md max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{t("dns.deleteTitle")}</DialogTitle>
             <DialogDescription>
@@ -321,6 +352,6 @@ export function DnsChannels() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </Page>
   );
 }

@@ -4,21 +4,26 @@ import { api } from "../lib/api";
 import type { Domain, DnsChannel } from "../types/api";
 import { Button } from "../components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../components/ui/table";
-import { Badge } from "../components/ui/badge";
 import { Card, CardContent } from "../components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "../components/ui/dialog";
 import { Input } from "../components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
 import { Label } from "../components/ui/label";
-import { CheckSquare, MoreHorizontal, Plus, RefreshCw, UploadCloud, Trash, Play, Pencil } from "lucide-react";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "../components/ui/dropdown-menu";
+import { Globe, MoreHorizontal, Plus, Power, PowerOff, RefreshCw, Search, UploadCloud, Trash, Play, Pencil, X } from "lucide-react";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "../components/ui/dropdown-menu";
 import { format } from "date-fns";
 import { toast } from "sonner";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../components/ui/tooltip";
 import { useI18n } from "../components/LocaleProvider";
+import { EmptyState, Page, TableSkeletonRows } from "../components/Page";
+import { StatusBadge } from "../components/StatusBadge";
+import { ExpiryMeter } from "../components/ExpiryMeter";
+import { copyText } from "../lib/clipboard";
+import { expiryTone } from "../lib/status";
+import { cn } from "../lib/utils";
 
 type FormValues = {
   id?: string;
@@ -47,7 +52,7 @@ export function Domains() {
   const [channelFilter, setChannelFilter] = useState("all");
   const selectAllRef = useRef<HTMLInputElement | null>(null);
 
-  const { data: domains = [], isLoading } = useQuery<Domain[]>({
+  const { data: domains = [], isLoading, isError, refetch } = useQuery<Domain[]>({
     queryKey: ['domains'],
     queryFn: () => api.get<Domain[]>('/admin/domains'),
   });
@@ -220,9 +225,22 @@ export function Domains() {
     setIsAddOpen(true);
   };
 
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text);
-    toast.success(t("domains.shaCopied"));
+  const copyToClipboard = async (text: string) => {
+    try {
+      await copyText(text);
+      toast.success(t("domains.shaCopied"));
+    } catch {
+      toast.error(t("nodes.copyFailed"));
+    }
+  };
+
+  const editingId = useWatch({ control: form.control, name: "id" });
+  const formChannelId = useWatch({ control: form.control, name: "dnsChannelId" });
+  const formChannel = channels.find((channel) => channel.id === formChannelId);
+
+  const openAdd = () => {
+    form.reset({ id: undefined, domain: "", dnsChannelId: "", enabled: true });
+    setIsAddOpen(true);
   };
 
   const isAllSelected = filteredDomains.length > 0 && effectiveSelectedIds.length === filteredDomains.length;
@@ -247,10 +265,11 @@ export function Domains() {
     if (!sha) return <span className="text-muted-foreground">-</span>;
     return (
       <Tooltip>
-        <TooltipTrigger>
-          <span className="font-mono text-xs cursor-pointer hover:underline text-muted-foreground" onClick={() => copyToClipboard(sha)}>
-            {sha.substring(0, 12)}...
-          </span>
+        <TooltipTrigger
+          className="rounded font-mono text-xs text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+          onClick={() => void copyToClipboard(sha)}
+        >
+          {sha.substring(0, 12)}…
         </TooltipTrigger>
         <TooltipContent>
           <p className="font-mono text-xs">{sha}</p>
@@ -259,111 +278,98 @@ export function Domains() {
     );
   };
 
-  return (
-    <div className="p-4 sm:p-6 w-full max-w-full overflow-x-hidden space-y-4 sm:space-y-6">
-      <div className="flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between">
-        <h1 className="text-2xl font-bold tracking-tight">{t("domains.title")}</h1>
-        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
-          <DropdownMenu>
-            <DropdownMenuTrigger render={<Button className="w-full sm:w-auto" variant="outline" disabled={!hasSelection || bulkActionMutation.isPending} />}>
-                <CheckSquare className="mr-2 h-4 w-4" />
-                {t("domains.bulkActions")}
-                {hasSelection ? ` (${effectiveSelectedIds.length})` : ""}
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={() => runBulkAction('issue')}>
-                <Play className="mr-2 h-4 w-4" /> {t("domains.bulkIssue")}
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => runBulkAction('renew')}>
-                <RefreshCw className="mr-2 h-4 w-4" /> {t("domains.bulkRenew")}
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => runBulkAction('sync')}>
-                <UploadCloud className="mr-2 h-4 w-4" /> {t("domains.bulkSync")}
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => runBulkAction('enable')}>
-                <RefreshCw className="mr-2 h-4 w-4" /> {t("domains.bulkEnable")}
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => runBulkAction('disable')}>
-                <RefreshCw className="mr-2 h-4 w-4" /> {t("domains.bulkDisable")}
-              </DropdownMenuItem>
-              <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => setBulkDeleteOpen(true)}>
-                <Trash className="mr-2 h-4 w-4" /> {t("domains.bulkDelete")}
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-          <Button className="w-full sm:w-auto" onClick={() => { form.reset({ id: undefined, domain: "", dnsChannelId: "", enabled: true }); setIsAddOpen(true); }}>
-            <Plus className="mr-2 h-4 w-4" /> {t("domains.add")}
-          </Button>
-        </div>
-      </div>
+  const bulkPending = bulkActionMutation.isPending;
 
-      <div className="flex flex-col gap-3 rounded-lg border bg-muted/30 p-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="grid gap-3 lg:grid-cols-3 sm:gap-4">
-          <div className="grid gap-2">
-            <Label htmlFor="domain-search">{t("domains.searchLabel")}</Label>
-            <Input
-              id="domain-search"
-              value={searchTerm}
-              onChange={(event) => setSearchTerm(event.target.value)}
-              placeholder={t("domains.searchPlaceholder")}
-              className="w-full sm:w-[240px]"
-            />
-          </div>
-          <div className="grid gap-2">
-            <Label htmlFor="domain-status-filter">{t("domains.statusFilter")}</Label>
-            <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value ?? "all")}>
-              <SelectTrigger id="domain-status-filter" className="w-full sm:w-[220px]">
-                <SelectValue>{statusFilterLabel}</SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">{t("domains.filterAllStatuses")}</SelectItem>
-                <SelectItem value="healthy">{t("domains.filterHealthy")}</SelectItem>
-                <SelectItem value="attention">{t("domains.filterAttention")}</SelectItem>
-                <SelectItem value="active">{t("status.active")}</SelectItem>
-                <SelectItem value="expiring">{t("status.expiring")}</SelectItem>
-                <SelectItem value="pending">{t("status.pending")}</SelectItem>
-                <SelectItem value="error">{t("status.error")}</SelectItem>
-                <SelectItem value="disabled">{t("common.disabled")}</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="grid gap-2">
-            <Label htmlFor="domain-channel-filter">{t("domains.channelFilter")}</Label>
-            <Select value={channelFilter} onValueChange={(value) => setChannelFilter(value ?? "all")}>
-              <SelectTrigger id="domain-channel-filter" className="w-full sm:w-[240px]">
-                <SelectValue>{channelFilterLabel}</SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">{t("domains.filterAllChannels")}</SelectItem>
-                {channels.map((channel) => (
-                  <SelectItem key={channel.id} value={channel.id}>
-                    {channel.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+  return (
+    <Page
+      title={t("domains.title")}
+      description={t("domains.description")}
+      actions={
+        <Button onClick={openAdd}>
+          <Plus /> {t("domains.add")}
+        </Button>
+      }
+    >
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+        <div className="relative sm:w-64">
+          <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            id="domain-search"
+            type="search"
+            aria-label={t("domains.searchLabel")}
+            value={searchTerm}
+            onChange={(event) => setSearchTerm(event.target.value)}
+            placeholder={t("domains.searchPlaceholder")}
+            className="pl-9"
+          />
         </div>
-        <p className="text-sm text-muted-foreground">
+        <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value ?? "all")}>
+          <SelectTrigger id="domain-status-filter" aria-label={t("domains.statusFilter")} className="w-full sm:w-44">
+            <SelectValue>{statusFilterLabel}</SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">{t("domains.filterAllStatuses")}</SelectItem>
+            <SelectItem value="healthy">{t("domains.filterHealthy")}</SelectItem>
+            <SelectItem value="attention">{t("domains.filterAttention")}</SelectItem>
+            <SelectItem value="active">{t("status.active")}</SelectItem>
+            <SelectItem value="expiring">{t("status.expiring")}</SelectItem>
+            <SelectItem value="pending">{t("status.pending")}</SelectItem>
+            <SelectItem value="error">{t("status.error")}</SelectItem>
+            <SelectItem value="disabled">{t("common.disabled")}</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select value={channelFilter} onValueChange={(value) => setChannelFilter(value ?? "all")}>
+          <SelectTrigger id="domain-channel-filter" aria-label={t("domains.channelFilter")} className="w-full sm:w-48">
+            <SelectValue>{channelFilterLabel}</SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">{t("domains.filterAllChannels")}</SelectItem>
+            {channels.map((channel) => (
+              <SelectItem key={channel.id} value={channel.id}>
+                {channel.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <p className="text-sm text-muted-foreground sm:ml-auto">
           {t("domains.filteredCount", { filtered: filteredDomains.length, total: domains.length })}
         </p>
       </div>
 
-      {hasSelection ? (
-        <div className="flex flex-col gap-2 rounded-lg border bg-muted/40 p-3 sm:flex-row sm:items-center sm:justify-between">
-          <p className="text-sm text-muted-foreground">
-            {t("domains.selectedCount", { count: effectiveSelectedIds.length })}
-          </p>
-          <Button variant="ghost" size="sm" className="w-full sm:w-auto" onClick={() => setSelectedIds([])}>
-            {t("domains.clearSelection")}
-          </Button>
-        </div>
-      ) : null}
-
-      <Card>
+      <Card className="gap-0 py-0">
+        {hasSelection ? (
+          <div className="flex flex-col gap-2 border-b bg-primary/5 px-4 py-2 animate-in fade-in-0 slide-in-from-top-1 duration-200 sm:flex-row sm:items-center">
+            <p className="text-sm font-medium">
+              {t("domains.selectedCount", { count: effectiveSelectedIds.length })}
+            </p>
+            <div className="flex flex-wrap items-center gap-1 sm:ml-auto">
+              <Button variant="ghost" size="sm" disabled={bulkPending} onClick={() => runBulkAction('issue')}>
+                <Play /> {t("domains.bulkIssue")}
+              </Button>
+              <Button variant="ghost" size="sm" disabled={bulkPending} onClick={() => runBulkAction('renew')}>
+                <RefreshCw /> {t("domains.bulkRenew")}
+              </Button>
+              <Button variant="ghost" size="sm" disabled={bulkPending} onClick={() => runBulkAction('sync')}>
+                <UploadCloud /> {t("domains.bulkSync")}
+              </Button>
+              <Button variant="ghost" size="sm" disabled={bulkPending} onClick={() => runBulkAction('enable')}>
+                <Power /> {t("domains.bulkEnable")}
+              </Button>
+              <Button variant="ghost" size="sm" disabled={bulkPending} onClick={() => runBulkAction('disable')}>
+                <PowerOff /> {t("domains.bulkDisable")}
+              </Button>
+              <Button variant="ghost" size="sm" className="text-destructive hover:bg-destructive/10 hover:text-destructive" disabled={bulkPending} onClick={() => setBulkDeleteOpen(true)}>
+                <Trash /> {t("domains.bulkDelete")}
+              </Button>
+              <Button variant="ghost" size="icon-sm" title={t("domains.clearSelection")} onClick={() => setSelectedIds([])}>
+                <X />
+                <span className="sr-only">{t("domains.clearSelection")}</span>
+              </Button>
+            </div>
+          </div>
+        ) : null}
         <CardContent className="p-0">
-          <div className="w-full overflow-x-auto">
-            <Table className="min-w-[860px]">
+          <Table className="min-w-[920px]">
             <TableHeader>
               <TableRow>
                 <TableHead className="w-[44px]">
@@ -374,110 +380,141 @@ export function Domains() {
                     checked={isAllSelected}
                     onChange={toggleSelectAll}
                     disabled={filteredDomains.length === 0}
-                    className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+                    className="block size-4"
                   />
                 </TableHead>
                 <TableHead>{t("table.domain")}</TableHead>
                 <TableHead>{t("table.status")}</TableHead>
+                <TableHead className="w-[200px]">{t("domains.expiresRemaining")}</TableHead>
                 <TableHead>{t("table.dnsChannel")}</TableHead>
                 <TableHead>SHA256</TableHead>
-                <TableHead>{t("domains.expiresRemaining")}</TableHead>
                 <TableHead>{t("domains.lastIssue")}</TableHead>
                 <TableHead>{t("domains.lastSync")}</TableHead>
-                <TableHead className="w-[80px]"></TableHead>
+                <TableHead className="w-[56px]"></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {isLoading ? (
-                <TableRow><TableCell colSpan={9} className="text-center py-8">{t("common.loading")}</TableCell></TableRow>
+                <TableSkeletonRows columns={9} />
+              ) : isError ? (
+                <TableRow className="hover:bg-transparent">
+                  <TableCell colSpan={9}>
+                    <EmptyState
+                      title={t("common.loadFailed")}
+                      action={<Button variant="outline" onClick={() => void refetch()}>{t("common.retry")}</Button>}
+                    />
+                  </TableCell>
+                </TableRow>
               ) : filteredDomains.length === 0 ? (
-                <TableRow><TableCell colSpan={9} className="text-center py-8 text-muted-foreground">{domains.length === 0 ? t("domains.empty") : t("domains.noFilteredResults")}</TableCell></TableRow>
+                <TableRow className="hover:bg-transparent">
+                  <TableCell colSpan={9}>
+                    {domains.length === 0 ? (
+                      <EmptyState
+                        icon={Globe}
+                        title={t("domains.empty")}
+                        action={<Button onClick={openAdd}><Plus /> {t("domains.add")}</Button>}
+                      />
+                    ) : (
+                      <EmptyState icon={Search} title={t("domains.noFilteredResults")} />
+                    )}
+                  </TableCell>
+                </TableRow>
               ) : (
-                filteredDomains.map((d) => (
-                  <TableRow key={d.id} className={!d.enabled ? "opacity-50 grayscale" : ""}>
+                filteredDomains.map((d) => {
+                  const selected = effectiveSelectedIds.includes(d.id);
+                  const tone = expiryTone(d.daysRemaining);
+                  return (
+                  <TableRow key={d.id} data-state={selected ? "selected" : undefined} className="data-[state=selected]:bg-primary/5">
                     <TableCell>
-                        <input
-                          type="checkbox"
-                          aria-label={t("domains.selectOne", { domain: d.domain })}
-                          checked={effectiveSelectedIds.includes(d.id)}
-                          onChange={() => toggleSelected(d.id)}
-                          className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
-                        />
+                      <input
+                        type="checkbox"
+                        aria-label={t("domains.selectOne", { domain: d.domain })}
+                        checked={selected}
+                        onChange={() => toggleSelected(d.id)}
+                        className="block size-4"
+                      />
                     </TableCell>
-                    <TableCell className="font-medium">{d.domain}</TableCell>
+                    <TableCell className={cn("font-medium", !d.enabled && "text-muted-foreground")}>{d.domain}</TableCell>
                     <TableCell>
-                      {!d.enabled ? <Badge variant="outline">{t("common.disabled")}</Badge> : (
-                        <Badge variant={d.status === 'active' ? 'default' : d.status === 'expiring' ? 'secondary' : d.status === 'error' ? 'destructive' : 'outline'}>
-                          {statusLabel(d.status)}
-                        </Badge>
-                      )}
+                      {!d.enabled
+                        ? <StatusBadge status="disabled">{t("common.disabled")}</StatusBadge>
+                        : <StatusBadge status={d.status}>{statusLabel(d.status)}</StatusBadge>}
                     </TableCell>
-                    <TableCell className="text-muted-foreground text-sm">
+                    <TableCell>
+                      {d.expiresAt ? (
+                        <div className={cn("space-y-1.5", !d.enabled && "opacity-50")}>
+                          <div className="flex items-baseline justify-between gap-3 text-xs">
+                            <span className="tabular text-sm">{format(new Date(d.expiresAt), 'yyyy-MM-dd')}</span>
+                            {d.daysRemaining !== null && (
+                              <span className={cn(
+                                "tabular",
+                                tone === "danger" ? "font-medium text-destructive" : tone === "warning" ? "font-medium text-warning" : "text-muted-foreground"
+                              )}>
+                                {d.daysRemaining < 0 ? t("status.expired") : t("common.daysLeft", { days: d.daysRemaining })}
+                              </span>
+                            )}
+                          </div>
+                          <ExpiryMeter days={d.daysRemaining} className="h-1" />
+                        </div>
+                      ) : <span className="text-muted-foreground">-</span>}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">
                       {channels.find(c => c.id === d.dnsChannelId)?.name || d.dnsChannelId}
                     </TableCell>
                     <TableCell>
                       {renderSha(d.certSha256)}
                     </TableCell>
-                    <TableCell>
-                      {d.expiresAt ? (
-                        <div className="text-sm">
-                          <div>{format(new Date(d.expiresAt), 'yyyy-MM-dd')}</div>
-                          {d.daysRemaining !== null && (
-                            <div className={d.daysRemaining <= 7 ? "text-destructive font-medium text-xs" : "text-muted-foreground text-xs"}>
-                              {t("common.daysLeft", { days: d.daysRemaining })}
-                            </div>
-                          )}
-                        </div>
-                      ) : '-'}
-                    </TableCell>
-                    <TableCell className="text-muted-foreground text-sm">
+                    <TableCell className="text-muted-foreground">
                       {d.lastIssuedAt ? formatRelative(d.lastIssuedAt) : t("common.never")}
                     </TableCell>
-                    <TableCell className="text-muted-foreground text-sm">
+                    <TableCell className="text-muted-foreground">
                       {d.lastSyncAt ? formatRelative(d.lastSyncAt) : t("common.never")}
                     </TableCell>
                     <TableCell>
                       <DropdownMenu>
-                        <DropdownMenuTrigger render={<Button variant="ghost" className="h-8 w-8 p-0" />}>
-                            <span className="sr-only">{t("common.edit")}</span>
-                            <MoreHorizontal className="h-4 w-4" />
+                        <DropdownMenuTrigger render={<Button variant="ghost" size="icon-sm" />}>
+                          <span className="sr-only">{t("table.actions")}</span>
+                          <MoreHorizontal />
                         </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
+                        <DropdownMenuContent align="end" className="w-44">
                           <DropdownMenuItem onClick={() => actionMutation.mutate({ id: d.id, action: 'issue' })}>
-                            <Play className="mr-2 h-4 w-4" /> {t("domains.issue")}
+                            <Play className="size-4" /> {t("domains.issue")}
                           </DropdownMenuItem>
                           <DropdownMenuItem onClick={() => actionMutation.mutate({ id: d.id, action: 'renew' })}>
-                            <RefreshCw className="mr-2 h-4 w-4" /> {t("domains.renew")}
+                            <RefreshCw className="size-4" /> {t("domains.renew")}
                           </DropdownMenuItem>
                           <DropdownMenuItem onClick={() => actionMutation.mutate({ id: d.id, action: 'sync' })}>
-                            <UploadCloud className="mr-2 h-4 w-4" /> {t("domains.sync")}
+                            <UploadCloud className="size-4" /> {t("domains.sync")}
                           </DropdownMenuItem>
+                          <DropdownMenuSeparator />
                           <DropdownMenuItem onClick={() => openEdit(d)}>
-                            <Pencil className="mr-2 h-4 w-4" /> {t("common.edit")}
+                            <Pencil className="size-4" /> {t("common.edit")}
                           </DropdownMenuItem>
                           <DropdownMenuItem onClick={() => toggleMutation.mutate({ id: d.id, enabled: !d.enabled })}>
-                            <RefreshCw className="mr-2 h-4 w-4" /> {d.enabled ? t("domains.disable") : t("domains.enable")}
+                            {d.enabled ? <PowerOff className="size-4" /> : <Power className="size-4" />}
+                            {d.enabled ? t("domains.disable") : t("domains.enable")}
                           </DropdownMenuItem>
+                          <DropdownMenuSeparator />
                           <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => setDeleteId(d.id)}>
-                            <Trash className="mr-2 h-4 w-4" /> {t("common.delete")}
+                            <Trash className="size-4" /> {t("common.delete")}
                           </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </TableCell>
                   </TableRow>
-                ))
+                  );
+                })
               )}
             </TableBody>
-            </Table>
-          </div>
+          </Table>
         </CardContent>
       </Card>
 
       <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
-        <DialogContent className="w-[calc(100vw-2rem)] max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-h-[90vh] overflow-y-auto">
           <form onSubmit={form.handleSubmit(onSubmit)}>
             <DialogHeader>
-              <DialogTitle>{form.getValues('id') ? t("domains.editTitle") : t("domains.addTitle")}</DialogTitle>
+              <DialogTitle>{editingId ? t("domains.editTitle") : t("domains.addTitle")}</DialogTitle>
             </DialogHeader>
             <div className="grid gap-4 py-4">
               <div className="grid gap-2">
@@ -487,9 +524,11 @@ export function Domains() {
               </div>
               <div className="grid gap-2">
                 <Label htmlFor="dnsChannelId">{t("table.dnsChannel")}</Label>
-                <Select onValueChange={(val) => val && form.setValue('dnsChannelId', val)} defaultValue={form.getValues('dnsChannelId')}>
-                  <SelectTrigger>
-                    <SelectValue placeholder={t("domains.selectDns")} />
+                <Select value={formChannelId || null} onValueChange={(val) => val && form.setValue('dnsChannelId', val, { shouldValidate: true, shouldDirty: true })}>
+                  <SelectTrigger id="dnsChannelId" className="w-full">
+                    <SelectValue placeholder={t("domains.selectDns")}>
+                      {formChannel ? `${formChannel.name} (${formChannel.provider})` : undefined}
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
                     {channels.map(c => (
@@ -500,11 +539,12 @@ export function Domains() {
                 {form.formState.errors.dnsChannelId && <p className="text-sm text-destructive">{form.formState.errors.dnsChannelId.message}</p>}
               </div>
               <div className="flex items-center gap-2 mt-2">
-                <input type="checkbox" id="enabled" {...form.register('enabled')} className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary" />
+                <input type="checkbox" id="enabled" {...form.register('enabled')} className="size-4" />
                 <Label htmlFor="enabled">{t("domains.enableAuto")}</Label>
               </div>
             </div>
             <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setIsAddOpen(false)}>{t("common.cancel")}</Button>
               <Button type="submit" disabled={saveMutation.isPending}>
                 {saveMutation.isPending ? t("common.saving") : t("common.save")}
               </Button>
@@ -514,7 +554,7 @@ export function Domains() {
       </Dialog>
 
       <Dialog open={!!deleteId} onOpenChange={(open) => !open && setDeleteId(null)}>
-        <DialogContent className="w-[calc(100vw-2rem)] max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{t("domains.deleteTitle")}</DialogTitle>
             <DialogDescription>
@@ -531,7 +571,7 @@ export function Domains() {
       </Dialog>
 
       <Dialog open={bulkDeleteOpen} onOpenChange={(open) => !open && !bulkActionMutation.isPending && setBulkDeleteOpen(false)}>
-        <DialogContent className="w-[calc(100vw-2rem)] max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{t("domains.bulkDeleteTitle")}</DialogTitle>
             <DialogDescription>
@@ -546,6 +586,6 @@ export function Domains() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </Page>
   );
 }

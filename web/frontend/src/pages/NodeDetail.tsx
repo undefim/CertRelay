@@ -1,11 +1,10 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../lib/api";
 import type { NodeDetailResponse, Domain, Settings as SettingsType } from "../types/api";
 import { Button } from "../components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../components/ui/table";
-import { Badge } from "../components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "../components/ui/dialog";
 import { ArrowLeft, Play, Pencil, Activity, Download, Trash2, TerminalSquare, Copy } from "lucide-react";
@@ -14,6 +13,10 @@ import { toast } from "sonner";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../components/ui/tooltip";
 import { useForm, useWatch } from "react-hook-form";
 import { useI18n } from "../components/LocaleProvider";
+import { EmptyState } from "../components/Page";
+import { StatusBadge } from "../components/StatusBadge";
+import { Skeleton } from "../components/ui/skeleton";
+import { copyText } from "../lib/clipboard";
 
 export function NodeDetail() {
   const { id } = useParams();
@@ -148,8 +151,30 @@ export function NodeDetail() {
     );
   };
 
-  if (isLoading) return <div className="p-8">{t("nodeDetail.loading")}</div>;
-  if (!node) return <div className="p-8 text-destructive">{t("nodeDetail.notFound")}</div>;
+  if (isLoading) {
+    return (
+      <div className="mx-auto w-full max-w-[1360px] space-y-5 px-4 py-5 sm:px-8 sm:py-7" role="status" aria-label={t("nodeDetail.loading")}>
+        <Skeleton className="h-12 w-72" />
+        <div className="grid gap-5 md:grid-cols-3">
+          <Skeleton className="h-44 rounded-xl md:col-span-2" />
+          <Skeleton className="h-44 rounded-xl" />
+        </div>
+        <Skeleton className="h-64 rounded-xl" />
+      </div>
+    );
+  }
+  if (!node) {
+    return (
+      <div className="mx-auto w-full max-w-[1360px] px-4 py-5 sm:px-8 sm:py-7">
+        <Card>
+          <EmptyState
+            title={t("nodeDetail.notFound")}
+            action={<Button variant="outline" render={<Link to="/nodes" />}><ArrowLeft /> {t("nav.nodes")}</Button>}
+          />
+        </Card>
+      </div>
+    );
+  }
 
   const openDeleteDialog = (domainIds: string[]) => {
     const selectedAssignments = node.assignments.filter((assignment) => domainIds.includes(assignment.domainId));
@@ -174,23 +199,7 @@ export function NodeDetail() {
 
   const copyToClipboard = async (text: string, successMessage?: string) => {
     try {
-      if (navigator.clipboard && window.isSecureContext) {
-        await navigator.clipboard.writeText(text);
-      } else {
-        const textarea = document.createElement("textarea");
-        textarea.value = text;
-        textarea.setAttribute("readonly", "true");
-        textarea.style.position = "fixed";
-        textarea.style.top = "-1000px";
-        document.body.appendChild(textarea);
-        textarea.focus();
-        textarea.select();
-        const copied = document.execCommand("copy");
-        document.body.removeChild(textarea);
-        if (!copied) {
-          throw new Error("execCommand copy failed");
-        }
-      }
+      await copyText(text);
       toast.success(successMessage || t("domains.shaCopied"));
     } catch {
       toast.error(t("nodes.copyFailed"));
@@ -230,10 +239,11 @@ export function NodeDetail() {
     if (!sha) return <span className="text-muted-foreground">-</span>;
     return (
       <Tooltip>
-        <TooltipTrigger>
-          <span className="font-mono text-xs cursor-pointer hover:underline text-muted-foreground" onClick={() => copyToClipboard(sha)}>
-            {sha.substring(0, 12)}...
-          </span>
+        <TooltipTrigger
+          className="rounded font-mono text-xs text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+          onClick={() => void copyToClipboard(sha)}
+        >
+          {sha.substring(0, 12)}…
         </TooltipTrigger>
         <TooltipContent>
           <p className="font-mono text-xs">{sha}</p>
@@ -243,29 +253,31 @@ export function NodeDetail() {
   };
 
   return (
-    <div className="p-4 sm:p-6 w-full max-w-full overflow-x-hidden space-y-4 sm:space-y-6">
-      <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
-        <Button variant="ghost" size="icon" onClick={() => window.history.back()}>
-          <ArrowLeft className="h-4 w-4" />
-        </Button>
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">{node.name}</h1>
-          <p className="text-muted-foreground text-sm font-mono">{node.ip}</p>
+    <div className="mx-auto w-full max-w-[1360px] space-y-5 px-4 py-5 sm:px-8 sm:py-7">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div className="min-w-0">
+          <Link to="/nodes" className="inline-flex items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground">
+            <ArrowLeft className="size-3.5" /> {t("nav.nodes")}
+          </Link>
+          <div className="mt-1.5 flex flex-wrap items-center gap-3">
+            <h1 className="text-[1.375rem] leading-tight font-semibold tracking-tight">{node.name}</h1>
+            <StatusBadge status={node.isOnline ? "online" : "offline"} live={node.isOnline}>
+              {node.isOnline ? t("status.online") : t("status.offline")}
+            </StatusBadge>
+          </div>
+          <p className="mt-1 font-mono text-sm text-muted-foreground">{node.ip || t("nodes.waitingHeartbeat")}</p>
         </div>
-        <div className="w-full sm:w-auto sm:ml-auto flex flex-col sm:flex-row items-start sm:items-center gap-2">
-          <Badge variant={node.isOnline ? 'default' : 'destructive'} className="text-sm px-3 py-1">
-            {node.isOnline ? t("status.online") : t("status.offline")}
-          </Badge>
-          <Button variant="outline" className="w-full sm:w-auto" onClick={() => setIsDeployCodeOpen(true)}>
-            <TerminalSquare className="mr-2 h-4 w-4" /> {t("nodeDetail.deployCode")}
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          <Button variant="outline" onClick={() => setIsDeployCodeOpen(true)}>
+            <TerminalSquare /> {t("nodeDetail.deployCode")}
           </Button>
-          <Button className="w-full sm:w-auto" onClick={() => runNowMutation.mutate()} disabled={runNowMutation.isPending || !node.isOnline}>
-            <Play className="mr-2 h-4 w-4" /> {t("nodeDetail.runNow")}
+          <Button onClick={() => runNowMutation.mutate()} disabled={runNowMutation.isPending || !node.isOnline}>
+            <Play /> {t("nodeDetail.runNow")}
           </Button>
         </div>
       </div>
 
-      <div className="grid gap-6 md:grid-cols-3">
+      <div className="grid gap-5 md:grid-cols-3">
         <Card className="md:col-span-2">
           <CardHeader>
             <CardTitle>{t("nodeDetail.basicInfo")}</CardTitle>
@@ -289,7 +301,7 @@ export function NodeDetail() {
               <div className="col-span-2">
                 <p className="text-muted-foreground mb-1">{t("nodeDetail.latestError")}</p>
                 {node.lastError ? (
-                  <p className="text-destructive bg-destructive/10 p-2 rounded text-xs font-mono">{node.lastError}</p>
+                  <p className="rounded-lg bg-destructive/10 px-3 py-2 font-mono text-xs break-words text-destructive">{node.lastError}</p>
                 ) : (
                   <p className="text-muted-foreground">{t("common.none")}</p>
                 )}
@@ -308,9 +320,9 @@ export function NodeDetail() {
             {node.recentEvents?.length > 0 ? (
               <div className="space-y-4">
                 {node.recentEvents.map(e => (
-                  <div key={e.id} className="text-sm border-l-2 border-border pl-4 pb-2">
-                    <p className="font-medium">{e.message}</p>
-                    <p className="text-xs text-muted-foreground">{format(new Date(e.createdAt), 'MMM dd, HH:mm:ss')}</p>
+                  <div key={e.id} className="border-l-2 border-border pb-1 pl-3 text-sm">
+                    <p className="leading-snug">{e.message}</p>
+                    <p className="mt-0.5 text-xs text-muted-foreground">{format(new Date(e.createdAt), 'MM-dd HH:mm:ss')}</p>
                   </div>
                 ))}
               </div>
@@ -340,7 +352,7 @@ export function NodeDetail() {
                   onClick={() => deployAssignmentMutation.mutate(effectiveSelectedDomainIds)}
                   disabled={deployAssignmentMutation.isPending}
                 >
-                  <Download className="mr-2 h-4 w-4" /> {t("nodeDetail.bulkDeploy")}
+                  <Download className="size-4" /> {t("nodeDetail.bulkDeploy")}
                 </Button>
                 <Button
                   className="w-full sm:w-auto"
@@ -349,7 +361,7 @@ export function NodeDetail() {
                   onClick={() => openDeleteDialog(effectiveSelectedDomainIds)}
                   disabled={deleteCertMutation.isPending}
                 >
-                  <Trash2 className="mr-2 h-4 w-4" /> {t("nodeDetail.bulkDelete")}
+                  <Trash2 className="size-4" /> {t("nodeDetail.bulkDelete")}
                 </Button>
                 <Button className="w-full sm:w-auto" variant="ghost" size="sm" onClick={() => setSelectedDomainIds([])}>
                   {t("nodeDetail.clearSelection")}
@@ -357,11 +369,11 @@ export function NodeDetail() {
               </>
             )}
             <Button className="w-full sm:w-auto" variant="outline" size="sm" onClick={openEdit}>
-              <Pencil className="mr-2 h-4 w-4" /> {t("nodeDetail.editAssignments")}
+              <Pencil className="size-4" /> {t("nodeDetail.editAssignments")}
             </Button>
           </div>
         </CardHeader>
-        <CardContent className="p-0">
+        <CardContent className="border-t p-0">
           <div className="w-full overflow-x-auto">
             <Table className="min-w-[820px]">
             <TableHeader>
@@ -370,7 +382,7 @@ export function NodeDetail() {
                   <input
                     ref={selectAllRef}
                     type="checkbox"
-                    className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+                    className="block size-4"
                     checked={allSelected}
                     aria-label={t("nodeDetail.selectAllAssignments")}
                     onChange={(event) => toggleSelectAll(event.target.checked)}
@@ -386,14 +398,21 @@ export function NodeDetail() {
             </TableHeader>
             <TableBody>
               {node.assignments?.length === 0 ? (
-                <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">{t("nodeDetail.noAssignments")}</TableCell></TableRow>
+                <TableRow className="hover:bg-transparent">
+                  <TableCell colSpan={7}>
+                    <EmptyState
+                      title={t("nodeDetail.noAssignments")}
+                      action={<Button variant="outline" onClick={openEdit}><Pencil /> {t("nodeDetail.editAssignments")}</Button>}
+                    />
+                  </TableCell>
+                </TableRow>
               ) : (
                 node.assignments?.map((a) => (
                   <TableRow key={a.id}>
                     <TableCell>
                       <input
                         type="checkbox"
-                        className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+                        className="block size-4"
                         checked={effectiveSelectedDomainIds.includes(a.domainId)}
                         aria-label={t("nodeDetail.selectAssignment", { domain: a.domainName || a.domainId })}
                         onChange={(event) => toggleDomainSelection(a.domainId, event.target.checked)}
@@ -403,9 +422,7 @@ export function NodeDetail() {
                     <TableCell>{renderSha(a.desiredSha256)}</TableCell>
                     <TableCell>{renderSha(a.deployedSha256)}</TableCell>
                     <TableCell>
-                      <Badge variant={a.status === 'synced' ? 'default' : a.status === 'pending' ? 'secondary' : 'destructive'}>
-                        {statusLabel(a.status)}
-                      </Badge>
+                      <StatusBadge status={a.status}>{statusLabel(a.status)}</StatusBadge>
                     </TableCell>
                     <TableCell className="text-muted-foreground text-sm">
                       {a.lastDeployAt ? formatRelative(a.lastDeployAt) : t("common.never")}
@@ -413,21 +430,21 @@ export function NodeDetail() {
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-2">
                         <Button
-                          variant="outline"
+                          variant="ghost"
                           size="sm"
                           onClick={() => deployAssignmentMutation.mutate([a.domainId])}
                           disabled={deployAssignmentMutation.isPending}
                         >
-                          <Download className="mr-2 h-4 w-4" /> {t("nodeDetail.deploy")}
+                          <Download className="size-4" /> {t("nodeDetail.deploy")}
                         </Button>
                         <Button
-                          variant="outline"
+                          variant="ghost"
                           size="sm"
-                          className="text-destructive hover:text-destructive"
+                          className="text-destructive hover:bg-destructive/10 hover:text-destructive"
                           onClick={() => openDeleteDialog([a.domainId])}
                           disabled={deleteCertMutation.isPending}
                         >
-                          <Trash2 className="mr-2 h-4 w-4" /> {t("nodeDetail.deleteCert")}
+                          <Trash2 className="size-4" /> {t("nodeDetail.deleteCert")}
                         </Button>
                       </div>
                     </TableCell>
@@ -472,7 +489,7 @@ export function NodeDetail() {
                         id={`domain-${d.id}`}
                         value={d.id}
                         {...form.register('domainIds')}
-                        className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+                        className="block size-4"
                       />
                       <label htmlFor={`domain-${d.id}`} className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer">
                         {d.domain}
@@ -508,7 +525,7 @@ export function NodeDetail() {
               </div>
               <pre className="overflow-x-auto rounded-md bg-muted p-3 text-xs leading-5 whitespace-pre-wrap break-all">{manualUpdateCommand}</pre>
               <Button variant="outline" size="sm" onClick={() => copyToClipboard(manualUpdateCommand, t("nodeDetail.commandCopied"))}>
-                <Copy className="mr-2 h-4 w-4" /> {t("nodeDetail.copyCommand")}
+                <Copy className="size-4" /> {t("nodeDetail.copyCommand")}
               </Button>
             </div>
 
@@ -522,7 +539,7 @@ export function NodeDetail() {
                   <p className="text-sm text-destructive">{t("nodeDetail.migrationSecretWarning")}</p>
                   <pre className="overflow-x-auto rounded-md bg-muted p-3 text-xs leading-5 whitespace-pre-wrap break-all">{migrationCommand}</pre>
                   <Button variant="outline" size="sm" onClick={() => copyToClipboard(migrationCommand, t("nodeDetail.commandCopied"))}>
-                    <Copy className="mr-2 h-4 w-4" /> {t("nodeDetail.copyCommand")}
+                    <Copy className="size-4" /> {t("nodeDetail.copyCommand")}
                   </Button>
                 </>
               ) : (

@@ -1,11 +1,13 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
-import { Server } from "lucide-react";
+import { Loader2 } from "lucide-react";
+import { Label } from "../components/ui/label";
+import { AuthShell } from "../components/AuthShell";
+import { PasswordInput } from "../components/PasswordInput";
 import { useAuth } from "../components/AuthProvider";
 import { useI18n } from "../components/LocaleProvider";
 import { Button } from "../components/ui/button";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "../components/ui/card";
 import { Input } from "../components/ui/input";
 import { ApiClientError, api } from "../lib/api";
 import type { AuthStatus } from "../types/api";
@@ -54,57 +56,46 @@ export function Setup() {
   };
 
   return (
-    <div className="flex min-h-screen w-full items-center justify-center bg-muted/30 p-4">
-      <Card className="w-full max-w-md">
-        <CardHeader className="space-y-1 text-center">
-          <div className="mb-4 flex justify-center">
-            <div className="rounded-full bg-primary/10 p-3">
-              <Server className="h-8 w-8 text-primary" />
-            </div>
-          </div>
-          <CardTitle className="text-2xl tracking-tight">{t("setup.title")}</CardTitle>
-          <CardDescription>{t("setup.description")}</CardDescription>
-        </CardHeader>
-        <form onSubmit={handleSubmit}>
-          <CardContent className="space-y-4">
-            {error && (
-              <div className="rounded-md bg-destructive/90 p-3 text-sm text-destructive-foreground">
-                {error}
-              </div>
-            )}
-            <Input
-              id="setup-username"
-              placeholder={t("setup.username")}
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              required
-            />
-            <Input
-              id="setup-password"
-              type="password"
-              placeholder={t("setup.password")}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              minLength={8}
-            />
-            <Input
-              id="setup-confirm-password"
-              type="password"
-              placeholder={t("setup.confirmPassword")}
-              value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
-              required
-              minLength={8}
-            />
-          </CardContent>
-          <CardFooter>
-            <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? t("setup.initializing") : t("setup.submit")}
-            </Button>
-          </CardFooter>
-        </form>
-      </Card>
-    </div>
+    <AuthShell title={t("setup.title")} description={t("setup.description")} error={error}>
+      <form onSubmit={handleSubmit} className="grid gap-4">
+        <div className="grid gap-2">
+          <Label htmlFor="setup-username">{t("setup.username")}</Label>
+          <Input
+            id="setup-username"
+            autoComplete="username"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            required
+          />
+        </div>
+        <div className="grid gap-2">
+          <Label htmlFor="setup-password">{t("setup.password")}</Label>
+          <PasswordInput
+            id="setup-password"
+            autoComplete="new-password"
+            autoFocus
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+            minLength={8}
+          />
+        </div>
+        <div className="grid gap-2">
+          <Label htmlFor="setup-confirm-password">{t("setup.confirmPassword")}</Label>
+          <PasswordInput
+            id="setup-confirm-password"
+            autoComplete="new-password"
+            value={confirmPassword}
+            onChange={(e) => setConfirmPassword(e.target.value)}
+            required
+            minLength={8}
+          />
+        </div>
+        <Button type="submit" size="lg" className="mt-2 w-full" disabled={loading}>
+          {loading ? <Loader2 className="animate-spin" /> : null}
+          {loading ? t("setup.initializing") : t("setup.submit")}
+        </Button>
+      </form>
+    </AuthShell>
   );
 }

@@ -5,12 +5,18 @@ type EventCallback = (event: SystemEvent) => void;
 
 class MockEventSource {
   private callbacks: EventCallback[] = [];
+  private closed = false;
+  private unsubscribe?: () => void;
 
   constructor() {
     import("./mock").then(({ eventStreamSubscribers }) => {
-      eventStreamSubscribers.push((evt) => {
-        this.callbacks.forEach(cb => cb(evt));
-      });
+      if (this.closed) return;
+      const listener: EventCallback = (evt) => this.callbacks.forEach(cb => cb(evt));
+      eventStreamSubscribers.push(listener);
+      this.unsubscribe = () => {
+        const index = eventStreamSubscribers.indexOf(listener);
+        if (index >= 0) eventStreamSubscribers.splice(index, 1);
+      };
     });
   }
 
@@ -19,6 +25,8 @@ class MockEventSource {
   }
 
   close() {
+    this.closed = true;
+    this.unsubscribe?.();
     this.callbacks = [];
   }
 }
@@ -28,6 +36,7 @@ class RealEventSource {
   private callbacks: EventCallback[] = [];
   private url: string;
   private retryTimeout: number | undefined;
+  private closed = false;
 
   constructor() {
     this.url = `${API_BASE_URL}/admin/events/stream`;
@@ -35,10 +44,12 @@ class RealEventSource {
   }
 
   private connect() {
+    if (this.closed) return;
     const token = localStorage.getItem('auth_token');
+    if (!token) return;
     // Using standard EventSource. In a real scenario, passing headers via native EventSource is tricky.
     // We append token to query string for auth.
-    const urlWithToken = `${this.url}?token=${token || ''}`;
+    const urlWithToken = `${this.url}?token=${encodeURIComponent(token)}`;
     
     this.es = new EventSource(urlWithToken);
 
@@ -52,6 +63,7 @@ class RealEventSource {
     };
 
     this.es.onerror = () => {
+      if (this.closed) return;
       this.es?.close();
       // Auto reconnect
       clearTimeout(this.retryTimeout);
@@ -64,6 +76,7 @@ class RealEventSource {
   }
 
   close() {
+    this.closed = true;
     this.es?.close();
     this.callbacks = [];
     clearTimeout(this.retryTimeout);
