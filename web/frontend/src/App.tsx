@@ -1,4 +1,5 @@
 import { lazy, Suspense } from "react";
+import { Loader2 } from "lucide-react";
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { ThemeProvider } from "./components/ThemeProvider";
@@ -7,6 +8,7 @@ import { LocaleProvider, useI18n } from "./components/LocaleProvider";
 import { Layout } from "./components/layout/Layout";
 import { Toaster } from "./components/ui/sonner";
 import { TooltipProvider } from "./components/ui/tooltip";
+import { Button } from "./components/ui/button";
 import { api } from "./lib/api";
 import type { AuthStatus } from "./types/api";
 
@@ -32,24 +34,35 @@ const queryClient = new QueryClient({
   },
 });
 
+function BootSplash({ label }: { label: string }) {
+  return (
+    <div className="flex min-h-dvh items-center justify-center" role="status" aria-label={label}>
+      <Loader2 className="size-5 animate-spin text-muted-foreground" />
+    </div>
+  );
+}
+
 function AuthBootstrapGate() {
   const location = useLocation();
   const { token } = useAuth();
   const { t } = useI18n();
-  const { data, isLoading, isError } = useQuery({
+  const { data, isLoading, isError, refetch, isFetching } = useQuery({
     queryKey: ["auth-status"],
     queryFn: () => api.get<AuthStatus>("/auth/status"),
   });
 
   if (isLoading) {
-    return <div className="flex min-h-screen items-center justify-center text-sm text-muted-foreground">{t("common.loading")}</div>;
+    return <BootSplash label={t("common.loading")} />;
   }
 
   if (isError || !data) {
     return (
       <div className="flex min-h-screen items-center justify-center p-4">
-        <div className="max-w-md rounded-lg border bg-background p-6 text-sm text-muted-foreground shadow-sm">
-          {t("setup.statusFailed")}
+        <div className="max-w-md rounded-xl border bg-card p-6 text-sm shadow-card">
+          <p className="text-muted-foreground">{t("setup.statusFailed")}</p>
+          <Button variant="outline" className="mt-4" onClick={() => void refetch()} disabled={isFetching}>
+            {t("common.retry")}
+          </Button>
         </div>
       </div>
     );
@@ -68,7 +81,7 @@ function AuthBootstrapGate() {
   }
 
   return (
-    <Suspense fallback={<div className="p-6 text-muted-foreground" role="status">{t("common.loading")}</div>}>
+    <Suspense fallback={<BootSplash label={t("common.loading")} />}>
     <Routes>
       <Route path="/login" element={<Login />} />
       <Route path="/setup" element={<Setup />} />

@@ -1,10 +1,12 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../components/AuthProvider";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "../components/ui/card";
 import { Input } from "../components/ui/input";
 import { Button } from "../components/ui/button";
-import { Server } from "lucide-react";
+import { Loader2 } from "lucide-react";
+import { Label } from "../components/ui/label";
+import { AuthShell } from "../components/AuthShell";
+import { PasswordInput } from "../components/PasswordInput";
 import { useI18n } from "../components/LocaleProvider";
 import { ApiClientError, api } from "../lib/api";
 
@@ -39,63 +41,40 @@ export function Login() {
       } else {
         setError(err instanceof ApiClientError ? err.message : (err as Error).message || t("login.failed"));
       }
-      if (import.meta.env.DEV && import.meta.env.VITE_USE_MOCKS !== 'true') {
-        console.warn('Falling back to dummy token in dev mode due to missing API');
-        login('dummy_dev_token');
-      }
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="flex h-screen w-full items-center justify-center bg-muted/30 p-4">
-      <Card className="w-full max-w-md">
-        <CardHeader className="space-y-1 text-center">
-          <div className="flex justify-center mb-4">
-            <div className="p-3 bg-primary/10 rounded-full">
-              <Server className="w-8 h-8 text-primary" />
-            </div>
-          </div>
-          <CardTitle className="text-2xl tracking-tight">{t("app.name")}</CardTitle>
-          <CardDescription>
-            {t("login.description")}
-          </CardDescription>
-        </CardHeader>
-        <form onSubmit={handleSubmit}>
-          <CardContent className="space-y-4">
-            {error && (
-              <div className="p-3 text-sm text-destructive-foreground bg-destructive/90 rounded-md">
-                {error}
-              </div>
-            )}
-            <div className="space-y-2">
-              <Input
-                id="username"
-                placeholder={t("login.username")}
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                required
-              />
-            </div>
-            <div className="space-y-2">
-              <Input
-                id="password"
-                type="password"
-                placeholder={t("login.password")}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-              />
-            </div>
-          </CardContent>
-          <CardFooter>
-            <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? t("login.signingIn") : t("login.signIn")}
-            </Button>
-          </CardFooter>
-        </form>
-      </Card>
-    </div>
+    <AuthShell title={t("app.name")} description={t("login.description")} error={error}>
+      <form onSubmit={handleSubmit} className="grid gap-4">
+        <div className="grid gap-2">
+          <Label htmlFor="username">{t("login.username")}</Label>
+          <Input
+            id="username"
+            autoComplete="username"
+            autoFocus
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            required
+          />
+        </div>
+        <div className="grid gap-2">
+          <Label htmlFor="password">{t("login.password")}</Label>
+          <PasswordInput
+            id="password"
+            autoComplete="current-password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+          />
+        </div>
+        <Button type="submit" size="lg" className="mt-2 w-full" disabled={loading}>
+          {loading ? <Loader2 className="animate-spin" /> : null}
+          {loading ? t("login.signingIn") : t("login.signIn")}
+        </Button>
+      </form>
+    </AuthShell>
   );
 }

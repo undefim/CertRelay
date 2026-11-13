@@ -6,48 +6,56 @@
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 240 10% 3.9%;
+    --background: 90 14% 96%;
+    --foreground: 160 20% 10%;
     --card: 0 0% 100%;
-    --card-foreground: 240 10% 3.9%;
+    --card-foreground: 160 20% 10%;
     --popover: 0 0% 100%;
-    --popover-foreground: 240 10% 3.9%;
-    --primary: 221 70% 46%;
-    --primary-foreground: 0 0% 98%;
-    --secondary: 240 4.8% 95.9%;
-    --secondary-foreground: 240 5.9% 10%;
-    --muted: 240 4.8% 95.9%;
-    --muted-foreground: 240 3.8% 46.1%;
-    --accent: 240 4.8% 95.9%;
-    --accent-foreground: 240 5.9% 10%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 240 5.9% 90%;
-    --input: 240 5.9% 90%;
-    --ring: 221 70% 46%;
-    --radius: 0.75rem;
+    --popover-foreground: 160 20% 10%;
+    --primary: 164 78% 27%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 100 10% 93%;
+    --secondary-foreground: 160 20% 14%;
+    --muted: 100 10% 93%;
+    --muted-foreground: 160 6% 38%;
+    --accent: 100 10% 93%;
+    --accent-foreground: 160 20% 14%;
+    --destructive: 4 65% 46%;
+    --destructive-foreground: 0 0% 100%;
+    --success: 152 62% 30%;
+    --warning: 33 88% 36%;
+    --border: 110 9% 87%;
+    --input: 110 9% 82%;
+    --ring: 164 78% 27%;
+    --radius: 0.625rem;
+    --shadow-card: 0 1px 2px hsl(160 20% 10% / 0.04), 0 4px 16px -8px hsl(160 20% 10% / 0.08);
+    color-scheme: light;
   }
 
   .dark {
-    --background: 240 10% 3.9%;
-    --foreground: 0 0% 98%;
-    --card: 240 10% 3.9%;
-    --card-foreground: 0 0% 98%;
-    --popover: 240 10% 3.9%;
-    --popover-foreground: 0 0% 98%;
-    --primary: 217 91% 70%;
-    --primary-foreground: 240 5.9% 10%;
-    --secondary: 240 3.7% 15.9%;
-    --secondary-foreground: 0 0% 98%;
-    --muted: 240 3.7% 15.9%;
-    --muted-foreground: 240 5% 64.9%;
-    --accent: 240 3.7% 15.9%;
-    --accent-foreground: 0 0% 98%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 240 3.7% 15.9%;
-    --input: 240 3.7% 15.9%;
-    --ring: 240 4.9% 83.9%;
+    --background: 160 16% 7%;
+    --foreground: 120 8% 92%;
+    --card: 160 13% 10%;
+    --card-foreground: 120 8% 92%;
+    --popover: 160 13% 12%;
+    --popover-foreground: 120 8% 92%;
+    --primary: 158 58% 52%;
+    --primary-foreground: 160 30% 8%;
+    --secondary: 160 9% 16%;
+    --secondary-foreground: 120 8% 92%;
+    --muted: 160 9% 15%;
+    --muted-foreground: 150 6% 62%;
+    --accent: 160 9% 16%;
+    --accent-foreground: 120 8% 92%;
+    --destructive: 4 78% 64%;
+    --destructive-foreground: 160 30% 8%;
+    --success: 152 55% 55%;
+    --warning: 38 90% 60%;
+    --border: 160 8% 18%;
+    --input: 160 8% 24%;
+    --ring: 158 58% 52%;
+    --shadow-card: 0 1px 2px hsl(0 0% 0% / 0.3);
+    color-scheme: dark;
   }
 }
 
@@ -57,11 +65,97 @@
   }
   body {
     @apply bg-background text-foreground;
+    font-family: "Geist Variable", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
     overflow-x: hidden;
   }
+  code, pre, .font-mono {
+    font-family: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+  }
+  ::selection { background: hsl(var(--primary) / 0.2); }
+  :focus-visible { outline: 2px solid hsl(var(--ring)); outline-offset: 2px; }
+  input[type="checkbox"] { accent-color: hsl(var(--primary)); cursor: pointer; }
+  button:not(:disabled), [role="menuitem"], [role="option"] { cursor: pointer; }
 }
+
+/* Thin, quiet scrollbars for inner scroll regions */
 @layer base {
-  body { font-family: "Geist Variable", system-ui, sans-serif; }
-  ::selection { background: hsl(var(--primary) / 0.18); }
-  :focus-visible { outline: 2px solid hsl(var(--ring)); outline-offset: 3px; }
+  * { scrollbar-width: thin; scrollbar-color: hsl(var(--border)) transparent; }
+}
+
+@layer utilities {
+  .tabular { font-variant-numeric: tabular-nums; }
+  .shadow-card { box-shadow: var(--shadow-card); }
+
+  /* Page content settles in when the route changes */
+  .page-enter { animation: page-enter 0.28s cubic-bezier(0.22, 1, 0.36, 1) both; }
+
+  /* A freshly arrived live event */
+  .event-enter { animation: event-enter 0.5s cubic-bezier(0.22, 1, 0.36, 1) both; }
+
+  /* Validity bar fills from the left once on mount */
+  .meter-fill {
+    transform-origin: left center;
+    animation: meter-fill 0.9s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  /* Soft halo around a live status dot */
+  .dot-live { position: relative; }
+  .dot-live::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: 9999px;
+    background: currentColor;
+    animation: dot-ping 2s cubic-bezier(0, 0, 0.2, 1) infinite;
+  }
+
+  .skeleton-shimmer {
+    background: linear-gradient(
+      90deg,
+      hsl(var(--muted)) 0%,
+      hsl(var(--muted)) 35%,
+      hsl(var(--border) / 0.7) 50%,
+      hsl(var(--muted)) 65%,
+      hsl(var(--muted)) 100%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 1.6s linear infinite;
+  }
+}
+
+@keyframes page-enter {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes event-enter {
+  from { opacity: 0; transform: translateY(-8px); background-color: hsl(var(--primary) / 0.12); }
+  60% { opacity: 1; transform: none; background-color: hsl(var(--primary) / 0.12); }
+  to { opacity: 1; transform: none; background-color: transparent; }
+}
+
+@keyframes meter-fill {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+
+@keyframes dot-ping {
+  0% { transform: scale(1); opacity: 0.55; }
+  75%, 100% { transform: scale(2.6); opacity: 0; }
+}
+
+@keyframes shimmer {
+  from { background-position: 200% 0; }
+  to { background-position: -200% 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .dot-live::after { display: none; }
 }

@@ -12,6 +12,8 @@ import { useForm, useWatch } from "react-hook-form";
 import { useEffect, useRef, useState, type ChangeEvent } from "react";
 import { Save, Bell, HardDrive, Terminal, Languages, Download, Upload, Shield } from "lucide-react";
 import { type Language, useI18n } from "../components/LocaleProvider";
+import { Page } from "../components/Page";
+import { Skeleton } from "../components/ui/skeleton";
 
 export function Settings() {
   const queryClient = useQueryClient();
@@ -160,7 +162,16 @@ export function Settings() {
     }
   };
 
-  if (isLoading) return <div className="p-8">{t("common.loading")}</div>;
+  if (isLoading) {
+    return (
+      <Page title={t("settings.title")} className="max-w-3xl">
+        <div className="space-y-5" role="status" aria-label={t("common.loading")}>
+          <Skeleton className="h-48 rounded-xl" />
+          <Skeleton className="h-72 rounded-xl" />
+        </div>
+      </Page>
+    );
+  }
 
   const accountUsername = accountUsernameDraft ?? account?.username ?? "";
 
@@ -181,14 +192,11 @@ export function Settings() {
   };
 
   return (
-    <div className="p-4 sm:p-6 w-full max-w-4xl overflow-x-hidden space-y-4 sm:space-y-6">
-      <div className="flex flex-col sm:flex-row gap-3 sm:items-center justify-between">
-        <h1 className="text-2xl font-bold tracking-tight">{t("settings.title")}</h1>
-      </div>
+    <Page title={t("settings.title")} className="max-w-3xl">
 
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2"><Languages className="h-5 w-5" /> {t("settings.interface")}</CardTitle>
+          <CardTitle className="flex items-center gap-2"><Languages className="size-4 text-primary" /> {t("settings.interface")}</CardTitle>
           <CardDescription>{t("settings.interfaceDescription")}</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-2">
@@ -217,7 +225,7 @@ export function Settings() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2"><Shield className="h-5 w-5" /> {t("settings.account")}</CardTitle>
+          <CardTitle className="flex items-center gap-2"><Shield className="size-4 text-primary" /> {t("settings.account")}</CardTitle>
           <CardDescription>{t("settings.accountDescription")}</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4">
@@ -264,14 +272,14 @@ export function Settings() {
         </CardContent>
         <CardFooter className="flex justify-end">
           <Button className="w-full sm:w-auto" type="button" onClick={submitAccountUpdate} disabled={updateAccountMutation.isPending}>
-            <Save className="mr-2 h-4 w-4" /> {updateAccountMutation.isPending ? t("common.saving") : t("settings.updateAccount")}
+            <Save className="size-4" /> {updateAccountMutation.isPending ? t("common.saving") : t("settings.updateAccount")}
           </Button>
         </CardFooter>
       </Card>
 
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2"><HardDrive className="h-5 w-5" /> {t("settings.backup")}</CardTitle>
+          <CardTitle className="flex items-center gap-2"><HardDrive className="size-4 text-primary" /> {t("settings.backup")}</CardTitle>
           <CardDescription>{t("settings.backupDescription")}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -286,18 +294,18 @@ export function Settings() {
         </CardContent>
         <CardFooter className="flex flex-col sm:flex-row justify-between gap-2">
           <Button className="w-full sm:w-auto" variant="outline" type="button" onClick={downloadBackup}>
-            <Download className="mr-2 h-4 w-4" /> {t("settings.downloadBackup")}
+            <Download className="size-4" /> {t("settings.downloadBackup")}
           </Button>
           <Button className="w-full sm:w-auto" type="button" onClick={onPickRestoreFile}>
-            <Upload className="mr-2 h-4 w-4" /> {t("settings.restoreBackup")}
+            <Upload className="size-4" /> {t("settings.restoreBackup")}
           </Button>
         </CardFooter>
       </Card>
 
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5">
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2"><HardDrive className="h-5 w-5" /> {t("settings.webdav")}</CardTitle>
+            <CardTitle className="flex items-center gap-2"><HardDrive className="size-4 text-primary" /> {t("settings.webdav")}</CardTitle>
             <CardDescription>{t("settings.webdavDescription")}</CardDescription>
           </CardHeader>
           <CardContent className="grid gap-4">
@@ -319,7 +327,7 @@ export function Settings() {
 
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2"><Bell className="h-5 w-5" /> {t("settings.telegram")}</CardTitle>
+            <CardTitle className="flex items-center gap-2"><Bell className="size-4 text-primary" /> {t("settings.telegram")}</CardTitle>
             <CardDescription>{t("settings.telegramDescription")}</CardDescription>
           </CardHeader>
           <CardContent className="grid gap-4">
@@ -341,7 +349,7 @@ export function Settings() {
 
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2"><Terminal className="h-5 w-5" /> {t("settings.acme")}</CardTitle>
+            <CardTitle className="flex items-center gap-2"><Terminal className="size-4 text-primary" /> {t("settings.acme")}</CardTitle>
             <CardDescription>{t("settings.acmeDescription")}</CardDescription>
           </CardHeader>
           <CardContent className="grid gap-4">
@@ -373,16 +381,16 @@ export function Settings() {
           </CardContent>
         </Card>
 
-        <div className="flex flex-col sm:flex-row justify-end gap-3 pb-10">
+        <div className="flex flex-col justify-end gap-2 sm:flex-row">
           <Button className="w-full sm:w-auto" type="button" variant="outline" onClick={() => form.reset(settings)}>{t("settings.discard")}</Button>
           <Button className="w-full sm:w-auto" type="submit" disabled={updateMutation.isPending}>
-            <Save className="mr-2 h-4 w-4" /> {updateMutation.isPending ? t("common.saving") : t("settings.saveAll")}
+            <Save className="size-4" /> {updateMutation.isPending ? t("common.saving") : t("settings.saveAll")}
           </Button>
         </div>
       </form>
 
       <Dialog open={!!pendingRestore} onOpenChange={(open) => !open && closeRestoreDialog()}>
-        <DialogContent className="w-[calc(100vw-2rem)] max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{t("settings.restoreTitle")}</DialogTitle>
             <DialogDescription>
@@ -405,6 +413,6 @@ export function Settings() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </Page>
   );
 }

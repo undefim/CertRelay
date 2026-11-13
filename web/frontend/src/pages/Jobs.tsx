@@ -1,25 +1,37 @@
 import { useQuery } from "@tanstack/react-query";
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import { api } from "../lib/api";
 import type { Job } from "../types/api";
 import { Button } from "../components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../components/ui/table";
-import { Badge } from "../components/ui/badge";
 import { Card, CardContent } from "../components/ui/card";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "../components/ui/sheet";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
-import { Terminal, RefreshCw, Eye, Copy } from "lucide-react";
+import { Activity, ChevronRight, Copy, RefreshCw, Search } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import { useI18n } from "../components/LocaleProvider";
+import { EmptyState, Page, TableSkeletonRows } from "../components/Page";
+import { StatusBadge } from "../components/StatusBadge";
+import { copyText } from "../lib/clipboard";
+import { cn } from "../lib/utils";
+
+const STATUS_OPTIONS = ["running", "pending", "success", "failed"] as const;
+const TYPE_OPTIONS = ["issue", "renew", "sync", "deploy", "delete", "upgrade", "test_dns"] as const;
+
+function formatDuration(ms: number): string {
+  if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
+  const totalSeconds = Math.round(ms / 1000);
+  return `${Math.floor(totalSeconds / 60)}m ${totalSeconds % 60}s`;
+}
 
 export function Jobs() {
   const { t, statusLabel, jobTypeLabel } = useI18n();
-  const [selectedJob, setSelectedJob] = useState<Job | null>(null);
+  const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [typeFilter, setTypeFilter] = useState<string>("all");
 
-  const { data: jobs = [], isLoading, refetch } = useQuery<Job[]>({
+  const { data: jobs = [], isLoading, isError, refetch, isFetching } = useQuery<Job[]>({
     queryKey: ['jobs'],
     queryFn: () => api.get<Job[]>('/admin/jobs'),
     refetchInterval: 10000,
@@ -31,114 +43,120 @@ export function Jobs() {
     return true;
   });
 
-  const statusFilterLabel = useMemo(() => {
-    if (statusFilter === "all") {
-      return t("jobs.allStatuses");
-    }
-    return statusLabel(statusFilter);
-  }, [statusFilter, statusLabel, t]);
-
-  const typeFilterLabel = useMemo(() => {
-    if (typeFilter === "all") {
-      return t("jobs.allTypes");
-    }
-    return jobTypeLabel(typeFilter);
-  }, [jobTypeLabel, t, typeFilter]);
+  // Read the open job from the live list so its status keeps up with polling.
+  const selectedJob = jobs.find((job) => job.id === selectedJobId) ?? null;
 
   return (
-    <div className="p-4 sm:p-6 w-full max-w-full overflow-x-hidden space-y-4 sm:space-y-6 flex flex-col h-full">
-      <div className="flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between">
-        <h1 className="text-2xl font-bold tracking-tight">{t("jobs.title")}</h1>
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
+    <Page
+      title={t("jobs.title")}
+      description={t("jobs.description")}
+      actions={
+        <>
           <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v || 'all')}>
-            <SelectTrigger className="w-full sm:w-[140px]">
-              <SelectValue>{statusFilterLabel}</SelectValue>
+            <SelectTrigger className="w-full sm:w-36" aria-label={t("table.status")}>
+              <SelectValue>{statusFilter === "all" ? t("jobs.allStatuses") : statusLabel(statusFilter)}</SelectValue>
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">{t("jobs.allStatuses")}</SelectItem>
-              <SelectItem value="running">{t("status.running")}</SelectItem>
-              <SelectItem value="success">{t("status.success")}</SelectItem>
-              <SelectItem value="failed">{t("status.failed")}</SelectItem>
+              {STATUS_OPTIONS.map((status) => (
+                <SelectItem key={status} value={status}>{statusLabel(status)}</SelectItem>
+              ))}
             </SelectContent>
           </Select>
           <Select value={typeFilter} onValueChange={(v) => setTypeFilter(v || 'all')}>
-            <SelectTrigger className="w-full sm:w-[140px]">
-              <SelectValue>{typeFilterLabel}</SelectValue>
+            <SelectTrigger className="w-full sm:w-36" aria-label={t("table.type")}>
+              <SelectValue>{typeFilter === "all" ? t("jobs.allTypes") : jobTypeLabel(typeFilter)}</SelectValue>
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">{t("jobs.allTypes")}</SelectItem>
-              <SelectItem value="issue">{t("jobs.type.issue")}</SelectItem>
-              <SelectItem value="renew">{t("jobs.type.renew")}</SelectItem>
-              <SelectItem value="sync">{t("jobs.type.sync")}</SelectItem>
-              <SelectItem value="deploy">{t("jobs.type.deploy")}</SelectItem>
-              <SelectItem value="delete">{t("jobs.type.delete")}</SelectItem>
-              <SelectItem value="upgrade">{t("jobs.type.upgrade")}</SelectItem>
+              {TYPE_OPTIONS.map((type) => (
+                <SelectItem key={type} value={type}>{jobTypeLabel(type)}</SelectItem>
+              ))}
             </SelectContent>
           </Select>
-          <Button className="w-full sm:w-auto" variant="outline" size="sm" onClick={() => refetch()}>
-            <RefreshCw className="mr-2 h-4 w-4" /> {t("common.refresh")}
+          <Button variant="outline" onClick={() => void refetch()} disabled={isFetching}>
+            <RefreshCw className={cn(isFetching && "animate-spin")} /> {t("common.refresh")}
           </Button>
-        </div>
-      </div>
-
-      <Card className="flex-1 overflow-hidden flex flex-col">
-        <CardContent className="p-0 overflow-auto flex-1">
-          <div className="min-w-[720px]">
-            <Table>
-              <TableHeader className="sticky top-0 bg-card z-10 shadow-sm">
+        </>
+      }
+    >
+      <Card className="gap-0 py-0">
+        <CardContent className="p-0">
+          <Table className="min-w-[720px]">
+            <TableHeader>
               <TableRow>
                 <TableHead>{t("table.type")}</TableHead>
                 <TableHead>{t("table.target")}</TableHead>
                 <TableHead>{t("table.status")}</TableHead>
                 <TableHead>{t("table.started")}</TableHead>
                 <TableHead>{t("table.duration")}</TableHead>
-                <TableHead className="w-[100px]"></TableHead>
+                <TableHead className="w-[48px]"></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {isLoading ? (
-                <TableRow><TableCell colSpan={6} className="text-center py-8">{t("common.loading")}</TableCell></TableRow>
+                <TableSkeletonRows columns={6} />
+              ) : isError ? (
+                <TableRow className="hover:bg-transparent">
+                  <TableCell colSpan={6}>
+                    <EmptyState
+                      title={t("jobs.loadFailed")}
+                      action={<Button variant="outline" onClick={() => void refetch()}>{t("common.retry")}</Button>}
+                    />
+                  </TableCell>
+                </TableRow>
               ) : filteredJobs.length === 0 ? (
-                <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground">{t("jobs.empty")}</TableCell></TableRow>
+                <TableRow className="hover:bg-transparent">
+                  <TableCell colSpan={6}>
+                    <EmptyState icon={jobs.length === 0 ? Activity : Search} title={t("jobs.empty")} />
+                  </TableCell>
+                </TableRow>
               ) : (
                 filteredJobs.map((j) => (
-                  <TableRow key={j.id} className="cursor-pointer hover:bg-muted/50" onClick={() => setSelectedJob(j)}>
+                  <TableRow
+                    key={j.id}
+                    tabIndex={0}
+                    className="group cursor-pointer"
+                    onClick={() => setSelectedJobId(j.id)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        setSelectedJobId(j.id);
+                      }
+                    }}
+                  >
                     <TableCell className="font-medium">{jobTypeLabel(j.type)}</TableCell>
                     <TableCell>{j.targetName || j.targetId}</TableCell>
                     <TableCell>
-                      <Badge variant={j.status === 'success' ? 'default' : j.status === 'running' ? 'secondary' : 'destructive'}>
-                        {statusLabel(j.status)}
-                      </Badge>
+                      <StatusBadge status={j.status} live={j.status === 'running'}>{statusLabel(j.status)}</StatusBadge>
                     </TableCell>
-                    <TableCell className="text-sm">
-                      {j.startedAt ? format(new Date(j.startedAt), 'MMM dd, HH:mm:ss') : '-'}
+                    <TableCell className="tabular text-muted-foreground">
+                      {j.startedAt ? format(new Date(j.startedAt), 'yyyy-MM-dd HH:mm:ss') : '-'}
                     </TableCell>
-                    <TableCell className="text-sm text-muted-foreground">
-                      {j.durationMs !== null ? `${(j.durationMs / 1000).toFixed(1)}s` : '-'}
+                    <TableCell className="tabular text-muted-foreground">
+                      {j.durationMs !== null ? formatDuration(j.durationMs) : '-'}
                     </TableCell>
                     <TableCell>
-                      <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); setSelectedJob(j); }}>
-                        <Eye className="mr-2 h-4 w-4" /> {t("common.view")}
-                      </Button>
+                      <ChevronRight className="size-4 text-muted-foreground transition-transform duration-150 group-hover:translate-x-0.5 group-hover:text-foreground" />
+                      <span className="sr-only">{t("common.view")}</span>
                     </TableCell>
                   </TableRow>
                 ))
               )}
             </TableBody>
-            </Table>
-          </div>
+          </Table>
         </CardContent>
       </Card>
 
-      <JobLogSheet job={selectedJob} onClose={() => setSelectedJob(null)} />
-    </div>
+      <JobLogSheet job={selectedJob} onClose={() => setSelectedJobId(null)} />
+    </Page>
   );
 }
 
 function JobLogSheet({ job, onClose }: { job: Job | null, onClose: () => void }) {
   const logEndRef = useRef<HTMLDivElement>(null);
-  const { t, jobTypeLabel } = useI18n();
-  
+  const { t, jobTypeLabel, statusLabel } = useI18n();
+
   const { data: logData, isLoading } = useQuery<{ logs: string }>({
     queryKey: ['job-logs', job?.id],
     queryFn: () => api.get<{ logs: string }>(`/admin/jobs/${job?.id}/logs`),
@@ -148,7 +166,7 @@ function JobLogSheet({ job, onClose }: { job: Job | null, onClose: () => void })
 
   useEffect(() => {
     if (logData?.logs) {
-      logEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+      logEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }
   }, [logData?.logs]);
 
@@ -167,57 +185,46 @@ function JobLogSheet({ job, onClose }: { job: Job | null, onClose: () => void })
 
   return (
     <Sheet open={!!job} onOpenChange={(open) => !open && onClose()}>
-      <SheetContent className="w-full sm:max-w-2xl flex flex-col h-full">
-        <SheetHeader className="flex flex-row items-start justify-between">
-          <div>
-            <SheetTitle className="flex items-center gap-2">
-              <Terminal className="h-5 w-5" /> {t("jobs.logsTitle")}
-            </SheetTitle>
-            <SheetDescription>
-              {job && t("jobs.sheetDescription", { type: jobTypeLabel(job.type), target: job.targetName || job.targetId })}
-            </SheetDescription>
-          </div>
-          {logData?.logs && (
-            <Button variant="outline" size="sm" onClick={copyLogs} className="mt-0">
-              <Copy className="h-4 w-4 mr-2" /> {t("jobs.copyLogs")}
-            </Button>
-          )}
+      <SheetContent className="flex h-full w-full flex-col gap-0 sm:max-w-2xl">
+        <SheetHeader className="gap-1 border-b px-5 py-4 pr-14">
+          <SheetTitle className="flex items-center gap-3">
+            {t("jobs.logsTitle")}
+            {job ? (
+              <StatusBadge status={job.status} live={job.status === 'running'}>{statusLabel(job.status)}</StatusBadge>
+            ) : null}
+          </SheetTitle>
+          <SheetDescription>
+            {job && t("jobs.sheetDescription", { type: jobTypeLabel(job.type), target: job.targetName || job.targetId })}
+          </SheetDescription>
         </SheetHeader>
-        
-        <div className="flex-1 mt-6 bg-[#1e1e1e] text-gray-300 rounded-md p-4 overflow-y-auto font-mono text-sm shadow-inner relative">
-          {isLoading && <div className="text-gray-500">{t("jobs.loadingLogs")}</div>}
-          <pre className="whitespace-pre-wrap break-words leading-relaxed">
-            {logData?.logs || (job?.status === 'running' ? t("jobs.waitingOutput") : t("jobs.noLogs"))}
-          </pre>
-          <div ref={logEndRef} />
+
+        {job?.error ? (
+          <p className="border-b bg-destructive/10 px-5 py-2.5 text-sm break-words text-destructive">{job.error}</p>
+        ) : null}
+
+        <div className="relative m-4 min-h-0 flex-1 overflow-hidden rounded-lg bg-[#101614] text-[#c9d6cf]">
+          {logData?.logs ? (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={copyLogs}
+              className="absolute top-2 right-3 z-10 bg-white/10 text-[#e6efe9] backdrop-blur hover:bg-white/20 hover:text-white dark:hover:bg-white/20"
+            >
+              <Copy /> {t("jobs.copyLogs")}
+            </Button>
+          ) : null}
+          <div className="h-full overflow-y-auto p-4 font-mono text-[13px]">
+            {isLoading ? (
+              <div className="text-[#7d8f86]">{t("jobs.loadingLogs")}</div>
+            ) : (
+              <pre className="leading-relaxed break-words whitespace-pre-wrap">
+                {logData?.logs || (job?.status === 'running' ? t("jobs.waitingOutput") : t("jobs.noLogs"))}
+              </pre>
+            )}
+            <div ref={logEndRef} />
+          </div>
         </div>
       </SheetContent>
     </Sheet>
   );
-}
-
-async function copyText(text: string): Promise<void> {
-  if (navigator.clipboard?.writeText && window.isSecureContext) {
-    await navigator.clipboard.writeText(text);
-    return;
-  }
-
-  const textArea = document.createElement("textarea");
-  textArea.value = text;
-  textArea.setAttribute("readonly", "true");
-  textArea.style.position = "fixed";
-  textArea.style.top = "-9999px";
-  textArea.style.left = "-9999px";
-  textArea.style.opacity = "0";
-  document.body.appendChild(textArea);
-  textArea.focus();
-  textArea.select();
-  textArea.setSelectionRange(0, text.length);
-
-  const copied = document.execCommand("copy");
-  document.body.removeChild(textArea);
-
-  if (!copied) {
-    throw new Error("copy failed");
-  }
 }

@@ -5,7 +5,6 @@ import { api } from "../lib/api";
 import type { CertNode, Settings as SettingsType } from "../types/api";
 import { Button } from "../components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../components/ui/table";
-import { Badge } from "../components/ui/badge";
 import { Card, CardContent } from "../components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "../components/ui/dialog";
 import { Input } from "../components/ui/input";
@@ -14,6 +13,9 @@ import { Plus, Server, Trash, Copy, CheckCircle2, Globe, Folder, TerminalSquare,
 import { toast } from "sonner";
 import { useForm } from "react-hook-form";
 import { useI18n } from "../components/LocaleProvider";
+import { EmptyState, Page, TableSkeletonRows } from "../components/Page";
+import { StatusBadge } from "../components/StatusBadge";
+import { copyText } from "../lib/clipboard";
 
 export function Nodes() {
   const queryClient = useQueryClient();
@@ -24,7 +26,7 @@ export function Nodes() {
   const [newNodeToken, setNewNodeToken] = useState<string | null>(null);
   const [newNodeCertDir, setNewNodeCertDir] = useState<string>("/etc/nginx/ssl");
 
-  const { data: nodes = [], isLoading } = useQuery<CertNode[]>({
+  const { data: nodes = [], isLoading, isError, refetch } = useQuery<CertNode[]>({
     queryKey: ['nodes'],
     queryFn: () => api.get('/admin/nodes'),
     refetchInterval: 30000,
@@ -157,23 +159,7 @@ export function Nodes() {
 
   const copyToClipboard = async (text: string) => {
     try {
-      if (navigator.clipboard && window.isSecureContext) {
-        await navigator.clipboard.writeText(text);
-      } else {
-        const textarea = document.createElement("textarea");
-        textarea.value = text;
-        textarea.setAttribute("readonly", "true");
-        textarea.style.position = "fixed";
-        textarea.style.top = "-1000px";
-        document.body.appendChild(textarea);
-        textarea.focus();
-        textarea.select();
-        const copied = document.execCommand("copy");
-        document.body.removeChild(textarea);
-        if (!copied) {
-          throw new Error("execCommand copy failed");
-        }
-      }
+      await copyText(text);
       toast.success(t("common.copied"));
     } catch {
       toast.error(t("nodes.copyFailed"));
@@ -181,92 +167,113 @@ export function Nodes() {
   };
 
   return (
-    <div className="p-4 sm:p-6 w-full max-w-full overflow-x-hidden space-y-4 sm:space-y-6">
-      <div className="flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between">
-        <h1 className="text-2xl font-bold tracking-tight">{t("nodes.title")}</h1>
-        <Button className="w-full sm:w-auto" onClick={() => setIsAddOpen(true)}>
-          <Plus className="mr-2 h-4 w-4" /> {t("nodes.add")}
+    <Page
+      title={t("nodes.title")}
+      description={t("nodes.description")}
+      actions={
+        <Button onClick={() => setIsAddOpen(true)}>
+          <Plus /> {t("nodes.add")}
         </Button>
-      </div>
-
-      <Card>
+      }
+    >
+      <Card className="gap-0 py-0">
         <CardContent className="p-0">
-          <div className="w-full overflow-x-auto">
-            <Table className="min-w-[920px]">
+          <Table className="min-w-[920px]">
             <TableHeader>
               <TableRow>
                 <TableHead>{t("table.name")}</TableHead>
-                <TableHead>{t("table.ipAddress")}</TableHead>
-                <TableHead>{t("table.agentVersion")}</TableHead>
                 <TableHead>{t("table.status")}</TableHead>
+                <TableHead>{t("table.agentVersion")}</TableHead>
                 <TableHead>{t("table.certDirectory")}</TableHead>
                 <TableHead>{t("table.assigned")}</TableHead>
-                <TableHead>{t("table.presenceTime")}</TableHead>
-                <TableHead className="w-[152px]"></TableHead>
+                <TableHead className="w-[132px]"></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {isLoading ? (
-                <TableRow><TableCell colSpan={8} className="text-center py-8">{t("common.loading")}</TableCell></TableRow>
+                <TableSkeletonRows columns={6} />
+              ) : isError ? (
+                <TableRow className="hover:bg-transparent">
+                  <TableCell colSpan={6}>
+                    <EmptyState
+                      title={t("common.loadFailed")}
+                      action={<Button variant="outline" onClick={() => void refetch()}>{t("common.retry")}</Button>}
+                    />
+                  </TableCell>
+                </TableRow>
               ) : nodes.length === 0 ? (
-                <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground">{t("nodes.empty")}</TableCell></TableRow>
+                <TableRow className="hover:bg-transparent">
+                  <TableCell colSpan={6}>
+                    <EmptyState
+                      icon={Server}
+                      title={t("nodes.empty")}
+                      action={<Button onClick={() => setIsAddOpen(true)}><Plus /> {t("nodes.add")}</Button>}
+                    />
+                  </TableCell>
+                </TableRow>
               ) : (
                 nodes.map((n) => (
                   <TableRow key={n.id}>
-                    <TableCell className="font-medium">
-                      <Link to={`/nodes/${n.id}`} className="hover:underline flex items-center gap-2">
-                        <Server className="w-4 h-4 text-muted-foreground" />
+                    <TableCell>
+                      <Link to={`/nodes/${n.id}`} className="font-medium underline-offset-4 hover:text-primary hover:underline">
                         {n.name}
                       </Link>
-                    </TableCell>
-                    <TableCell className="font-mono text-sm text-muted-foreground">
-                      {n.ip || t("nodes.waitingHeartbeat")}
-                    </TableCell>
-                    <TableCell>
-                      <div className="font-mono text-xs">{n.agentVersion || t("nodes.versionUnknown")}</div>
-                      <div className="text-[10px] text-muted-foreground mt-0.5">
-                        {t("nodes.latestVersionValue", { version: n.latestAgentVersion })}
+                      <div className="mt-0.5 font-mono text-xs text-muted-foreground">
+                        {n.ip || t("nodes.waitingHeartbeat")}
                       </div>
-                      <Badge variant={n.updateAvailable ? 'secondary' : 'outline'} className="mt-1 text-[10px]">
-                        {!n.agentVersion
-                          ? t("nodes.versionUnknown")
-                          : n.updateAvailable
-                            ? (n.supportsSelfUpdate ? t("nodes.updateAvailable") : t("nodes.manualBootstrap"))
-                            : t("nodes.latestVersion")}
-                      </Badge>
                     </TableCell>
                     <TableCell>
-                      <Badge variant={n.isOnline ? 'default' : 'destructive'}>
-                          {n.isOnline ? t("status.online") : t("status.offline")}
-                      </Badge>
+                      <StatusBadge status={n.isOnline ? "online" : "offline"} live={n.isOnline}>
+                        {n.isOnline ? t("status.online") : t("status.offline")}
+                      </StatusBadge>
+                      <div className="mt-1 text-xs text-muted-foreground">
+                        {n.isOnline
+                          ? (n.lastHeartbeatAt
+                              ? t("nodes.lastHeartbeatAt", { time: formatRelative(n.lastHeartbeatAt) })
+                              : t("common.never"))
+                          : (n.offlineAt
+                              ? t("nodes.offlineSince", { time: formatRelative(n.offlineAt) })
+                              : t("common.never"))}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-xs">{n.agentVersion || t("nodes.versionUnknown")}</span>
+                        {n.agentVersion && n.updateAvailable ? (
+                          <StatusBadge tone="warning" className="h-5 px-2 text-[11px]">
+                            {n.supportsSelfUpdate ? t("nodes.updateAvailable") : t("nodes.manualBootstrap")}
+                          </StatusBadge>
+                        ) : null}
+                      </div>
+                      <div className="mt-0.5 text-xs text-muted-foreground">
+                        {n.agentVersion && !n.updateAvailable
+                          ? t("nodes.latestVersion")
+                          : t("nodes.latestVersionValue", { version: n.latestAgentVersion })}
+                      </div>
                     </TableCell>
                     <TableCell className="font-mono text-xs">{n.certDir}</TableCell>
-                    <TableCell>{t("nodes.assignedDomains", { count: n.assignedDomainsCount })}</TableCell>
-                    <TableCell className="text-muted-foreground text-sm">
-                      {n.isOnline
-                        ? (n.lastHeartbeatAt
-                            ? t("nodes.lastHeartbeatAt", { time: formatRelative(n.lastHeartbeatAt) })
-                            : t("common.never"))
-                        : (n.offlineAt
-                            ? t("nodes.offlineSince", { time: formatRelative(n.offlineAt) })
-                            : t("common.never"))}
-                    </TableCell>
+                    <TableCell className="text-muted-foreground">{t("nodes.assignedDomains", { count: n.assignedDomainsCount })}</TableCell>
                     <TableCell>
-                      <div className="flex justify-end gap-1">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          title={n.supportsSelfUpdate ? t("nodes.upgrade") : t("nodes.manualBootstrapHint")}
-                          disabled={!n.isOnline || !n.updateAvailable || !n.supportsSelfUpdate || (upgradeMutation.isPending && upgradeMutation.variables === n.id)}
-                          onClick={() => upgradeMutation.mutate(n.id)}
-                        >
-                          <ArrowUpCircle className={`h-4 w-4 ${n.updateAvailable ? 'text-primary' : ''}`} />
+                      <div className="flex justify-end gap-0.5">
+                        {n.updateAvailable ? (
+                          <Button
+                            variant="ghost"
+                            size="icon-sm"
+                            title={n.supportsSelfUpdate ? t("nodes.upgrade") : t("nodes.manualBootstrapHint")}
+                            disabled={!n.isOnline || !n.supportsSelfUpdate || (upgradeMutation.isPending && upgradeMutation.variables === n.id)}
+                            onClick={() => upgradeMutation.mutate(n.id)}
+                          >
+                            <ArrowUpCircle className="text-primary" />
+                            <span className="sr-only">{t("nodes.upgrade")}</span>
+                          </Button>
+                        ) : null}
+                        <Button variant="ghost" size="icon-sm" title={t("common.edit")} onClick={() => openRenameDialog(n)}>
+                          <Pencil />
+                          <span className="sr-only">{t("common.edit")}</span>
                         </Button>
-                        <Button variant="ghost" size="icon" onClick={() => openRenameDialog(n)}>
-                          <Pencil className="h-4 w-4" />
-                        </Button>
-                        <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => setDeleteId(n.id)}>
-                          <Trash className="h-4 w-4" />
+                        <Button variant="ghost" size="icon-sm" title={t("common.delete")} className="text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={() => setDeleteId(n.id)}>
+                          <Trash />
+                          <span className="sr-only">{t("common.delete")}</span>
                         </Button>
                       </div>
                     </TableCell>
@@ -274,8 +281,7 @@ export function Nodes() {
                 ))
               )}
             </TableBody>
-            </Table>
-          </div>
+          </Table>
         </CardContent>
       </Card>
 
@@ -299,14 +305,14 @@ export function Nodes() {
               <div className="grid gap-4 py-4">
                 <div className="grid gap-2">
                   <Label htmlFor="name">{t("nodes.nodeName")}</Label>
-                  <Input id="name" placeholder={t("nodes.nodePlaceholder")} required {...addForm.register('name')} />
+                  <Input id="name" placeholder={t("nodes.nodePlaceholder")} required autoFocus {...addForm.register('name')} />
                 </div>
                 <div className="grid gap-2">
                   <Label htmlFor="certDir">{t("table.certDirectory")}</Label>
                   <Input id="certDir" placeholder="/etc/nginx/ssl" required {...addForm.register('certDir')} />
                 </div>
               </div>
-              <DialogFooter>
+              <DialogFooter className="-mx-4 -mb-4 px-4 sm:-mx-6 sm:-mb-6 sm:px-6">
                 <Button type="submit" disabled={createMutation.isPending}>
                   {createMutation.isPending ? t("nodes.generatingToken") : t("nodes.register")}
                 </Button>
@@ -368,7 +374,7 @@ export function Nodes() {
                       className="w-full sm:w-auto shrink-0"
                       onClick={() => copyToClipboard(installCommand)}
                     >
-                      <Copy className="mr-2 h-4 w-4" />
+                      <Copy className="size-4" />
                       {t("common.copy")}
                     </Button>
                   </div>
@@ -393,7 +399,7 @@ export function Nodes() {
           renameForm.reset({ name: "", ip: "", certDir: "/etc/nginx/ssl" });
         }
       }}>
-        <DialogContent className="w-[calc(100vw-2rem)] max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-h-[90vh] overflow-y-auto">
           <form onSubmit={renameForm.handleSubmit(onRenameSubmit)}>
             <DialogHeader>
               <DialogTitle>{t("nodes.renameTitle")}</DialogTitle>
@@ -441,7 +447,7 @@ export function Nodes() {
       </Dialog>
 
       <Dialog open={!!deleteId} onOpenChange={(open) => !open && setDeleteId(null)}>
-        <DialogContent className="w-[calc(100vw-2rem)] max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{t("nodes.deleteTitle")}</DialogTitle>
             <DialogDescription>
@@ -456,6 +462,6 @@ export function Nodes() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </Page>
   );
 }
